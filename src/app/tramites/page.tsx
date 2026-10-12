@@ -33,9 +33,9 @@ export default function ListaTramites() {
       const guardados = JSON.parse(
         localStorage.getItem("notiddrr_tramites") || "[]"
       );
-      setTramites(Array.isArray(guardados) ? guardados : []);
+      setTramites(Array.isArray(guardados) ? guardados : []); // eslint-disable-line react-hooks/set-state-in-effect
     } catch {
-      setTramites([]);
+      setTramites([]); // eslint-disable-line react-hooks/set-state-in-effect
     }
 
     setListo(true);
@@ -55,9 +55,18 @@ export default function ListaTramites() {
     return coincideBusqueda && coincideEstado;
   });
 
+  const esVencido = (fecha: string) => {
+    const fechaTramite = new Date(fecha);
+    const hoy = new Date();
+    const diferenciaDias = (hoy.getTime() - fechaTramite.getTime()) / (1000 * 60 * 60 * 24);
+    return diferenciaDias > 30;
+  };
+
   const fechaLegible = (fecha: string) => {
     return new Date(fecha).toLocaleDateString("es-BO");
   };
+
+  const countVencidos = tramites.filter((t) => esVencido(t.fecha)).length;
 
   if (!listo) {
     return <main className="p-8">Cargando trámites...</main>;
@@ -84,12 +93,17 @@ export default function ListaTramites() {
             </p>
           </div>
 
-          <Link
-            href="/tramites/nuevo"
-            className="rounded-xl bg-blue-900 px-5 py-3 font-semibold text-white hover:bg-blue-700"
-          >
-            + Nuevo trámite
-          </Link>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="rounded-lg bg-red-100 px-3 py-1 text-xs text-red-800 font-semibold">
+              {countVencidos} vencidos
+            </span>
+            <a
+              href="/tramites/nuevo"
+              className="rounded-xl bg-blue-900 px-5 py-3 font-semibold text-white hover:bg-blue-700"
+            >
+              + Nuevo trámite
+            </a>
+          </div>
         </div>
 
         <section className="mt-8 rounded-2xl bg-white p-6 shadow-md">
