@@ -1,0 +1,101 @@
+# Análisis y Plan de Mejora Frontend: Módulo Ciudadanos
+**Ruta:** `http://localhost:3000/ciudadanos`
+**Stack:** React 19.3.0, Next.js 16.4.0 (App Router), Tailwind CSS v4, TypeScript
+
+---
+
+## 1. Diagnóstico del Frontend Actual
+
+Tras analizar el informe técnico, el componente principal `src/app/ciudadanos/page.tsx` presenta un patrón de **"Componente Monolítico"** (o *God Component*). Actualmente, este único archivo de 212 líneas es responsable de demasiadas tareas:
+
+*   **Renderizado de UI:** Maneja tanto la vista del formulario como la tabla de datos en el mismo árbol de componentes.
+*   **Gestión de Estado Local:** Utiliza múltiples llamadas a `useState` dispersas para controlar inputs individuales (`nombre`, `ci`, `whatsapp`), el array de datos y los estados de carga/feedback.
+*   **Lógica de Negocio y Validaciones:** Las expresiones regulares (Regex) y las validaciones de duplicidad están acopladas directamente en el manejador del evento `onSubmit` (`registrar`).
+*   **Efectos Secundarios y Persistencia:** El componente lee directamente de `localStorage` y `sessionStorage` dentro de un `useEffect`, mezclando la lógica de "autenticación/acceso" con la hidratación de datos.
+
+**Veredicto:** Funciona para un prototipo rápido, pero es frágil, difícil de testear y propenso a re-renderizados innecesarios a medida que la aplicación crezca.
+
+---
+
+## 2. Propuestas de Mejora UI/UX y Código
+
+### A. Modularización de Componentes (Separación de Responsabilidades)
+Debemos dividir el monolito aplicando el principio de responsabilidad única (SRP):
+1.  **Tipos separados:** Extraer `type Ciudadano` a un directorio `src/types/ciudadano.ts`.
+2.  **Componentes visuales puros (Dumb Components):**
+    *   `CiudadanoForm.tsx`: Recibe la función `onSubmit` por props.
+    *   `CiudadanosTable.tsx`: Recibe el array `ciudadanos` por props.
+3.  **Hooks personalizados:** Extraer toda la lógica de acceso a `localStorage` y validación a un hook llamado `useCiudadanos()`.
+
+### B. Optimización del Renderizado y Gestión del Estado
+*   **Reducción de `useState`:** Agrupar los estados del formulario en un solo objeto (ej. `const [formData, setFormData] = useState({ nombre: '', ci: '', whatsapp: '' })`) o, idealmente, implementar una librería como **React Hook Form** para evitar re-renderizar todo el componente en cada pulsación de tecla.
+*   **Manejo de Carga Mejorado:** En lugar de un simple texto "Cargando ciudadanos...", implementar un *Skeleton Loader* de Tailwind mientras `listo === false`.
+*   **Filtros (Mejora funcional):** Agregar un input de búsqueda simple (por Nombre o CI) para la tabla, filtrando el array derivado en el cliente antes del render.
+
+### C. Experiencia de Usuario (UI/UX) y Accesibilidad
+*   **Accesibilidad (A11y):** 
+    *   Añadir `role="alert"` o `aria-live="polite"` al contenedor del estado de mensajes para que los lectores de pantalla anuncien los errores.
+    *   Vincular los inputs con sus errores usando `aria-describedby`.
+*   **Feedback Visual:** Reemplazar el mensaje de texto plano por un sistema de *Toasts* (notificaciones flotantes) temporales para los éxitos y errores.
+*   **Microinteracciones:** Deshabilitar el botón de "Guardar ciudadano" (`disabled={isLoading}`) e incluir un spinner mientras se procesa la validación.
+
+---
+
+## 3. Refactorización Recomendada
+
+La sección más crítica a refactorizar es la extracción de la lógica de negocio fuera de la UI. Aquí tienes un ejemplo de cómo implementar el patrón de *Custom Hook* para encapsular la lógica.
+
+**Paso 1: Crear `src/hooks/useCiudadanos.ts`**
+
+```tsx
+import { useState, useEffect } from 'react';
+import { Ciudadano } from '@/types/ciudadano';
+
+export const useCiudadanos = () => {
+  const [ciudadanos, setCiudadanos] = useState<Ciudadano[]>([]);
+  const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("notiddrr_ciudadanos");
+      if (stored) setCiudadanos(JSON.parse(stored));
+    } catch (err) {
+      console.error("Error leyendo localStorage", err);
+      setCiudadanos([]);
+    } finally {
+      setIsReady(true);
+    }
+  }, []);
+
+  const agregarCiudadano = (nuevoCiudadano: Omit<Ciudadano, 'id'>) => {
+    setError(null);
+    
+    // Validaciones
+    if (!/^\d{7,8}$/.test(nuevoCiudadano.ci.trim())) {
+      setError("El CI debe tener 7 u 8 dígitos.");
+      return false;
+    }
+    if (!/^[67]\d{7}$/.test(nuevoCiudadano.whatsapp.trim())) {
+      setError("Ingrese un celular boliviano válido de 8 dígitos.");
+      return false;
+    }
+    if (ciudadanos.some(c => c.ci === nuevoCiudadano.ci.trim())) {
+      setError("Ya existe un ciudadano registrado con ese CI.");
+      return false;
+    }
+
+    // Actualización
+    const ciudadanoCompleto: Ciudadano = {
+      ...nuevoCiudadano,
+      id: crypto.randomUUID()
+    };
+    
+    const actualizados = [...ciudadanos, ciudadanoCompleto];
+    setCiudadanos(actualizados);
+    localStorage.setItem("notiddrr_ciudadanos", JSON.stringify(actualizados));
+    return true;
+  };
+
+  return { ciudadanos, isReady, error, agregarCiudadano };
+};

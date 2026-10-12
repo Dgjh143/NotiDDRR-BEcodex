@@ -1,0 +1,307 @@
+INFORME TÉCNICO: NOTIDDRR-BECODEX - MÓDULO CIUDADANOS
+====================================================
+
+Fecha: Mon Oct 12 2026
+Proyecto: NotiDDRR-BEcodex (Sprint 1 - Demostración Frontend)
+Stack: Next.js 16.4.0 (App Router), React 19.3.0, TypeScript, Tailwind CSS v4
+
+================================================================================
+1. RESUMEN GENERAL DE LA ARQUITECTURA
+================================================================================
+
+TIPO DE PROYECTO:
+  - Aplicación web frontend (prototipo/demo "Sprint 1")
+  - Arquitectura App Router de Next.js 16.4.0 (todos los archivos en src/app/)
+  - NO hay directorio pages/ ni app/api/ - routing puro por archivos .tsx
+
+STACK TECNOLÓGICO:
+  - Next.js 16.4.0 con Turbopack (bundler de desarrollo)
+  - React 19.3.0 + React DOM 19.3.0
+  - TypeScript (tsconfig.json objetivo ES2017, strict mode)
+  - Tailwind CSS v4 (configurado via @tailwindcss/turbopack rules)
+  - ESLint 9 flat config (eslint.config.mjs) extendiendo next.config.js
+  - Sin backend/ API identificada - persistencia completamente client-side
+
+Estructura de Directorios Principales:
+  - src/app/       -> Todas las rutas y páginas (App Router)
+  - src/app/ciudadanos/ -> Módulo de registro/ver ciudadanos
+  - src/app/dashboard/ -> Panel principal (acceso posterior al login)
+  - src/app/tramites/ -> Módulo de trámites (relacionado)
+  - src/app/       -> Página de login (autenticación)
+  - globals.css    -> Estilos globales Tailwind
+  - package.json   -> next 16.4.0, react 19.3.0, tailwindcss 4, eslint 9, typescript 5
+
+PATRONES DE RUTAS:
+  - /                  -> Página de login (auth)
+  - /dashboard         -> Panel principal (post-login)
+  - /ciudadanos        -> Registro y lista de ciudadanos (objetivo actual)
+  - /tramites          -> Módulo de trámites
+  - /tramites/nuevo    -> Formulario nuevo trámite
+
+PERSISTENCIA DE DATOS:
+  - sessionStorage: "notiddrr_demo" flag (controla acceso a /ciudadanos)
+  - localStorage: "notiddrr_ciudadanos" (array JSON de objetos ciudadano)
+  - Sin conexión a base de datos ni API externa - demo en vivo del navegador
+
+================================================================================
+2. ANÁLISIS DETALLADO DEL MÓDULO "CIUDADANOS"
+================================================================================
+
+ARCHIVO PRINCIPAL:
+  - RUTA: src/app/ciudadanos/page.tsx (212 líneas)
+  - Tipo: Client Component ("use client" en línea 2)
+  - Export default: function CiudadanosPage()
+
+ESTRUCTURA DE INTERFAZ DE USUARIO (UI):
+  Componente principal contiene dos secciones principales:
+
+  A) Formulario "Nuevo Ciudadano" (izquierda, col-span-1 en lg):
+    - Input: nombre completo (required)
+    - Input: CI (7-8 dígitos, validado regex /^\d{7,8}$/)
+    - Input: WhatsApp (válido boliviano /^[67]\d{7}$/)
+    - Botón: "Guardar ciudadano" (bg-blue-900)
+    - Área de mensaje de estado (text-sm text-blue-800)
+    - Validaciones en tiempo real:
+      * Campos vacíos -> "Complete todos los campos."
+      * CI inválido -> "El CI debe tener 7 u 8 dígitos."
+      * WhatsApp inválido -> "Ingrese un celular boliviano válido de 8 dígitos."
+      * CI duplicado -> "Ya existe un ciudadano registrado con ese CI."
+    - Al éxito: "Ciudadano registrado correctamente." y limpieza de campos
+
+  B) Tabla "Ciudadanos Registrados" (derecha, col-span-2 en lg):
+    - Header: "Nombre | CI | WhatsApp"
+    - Dinámico: muestra count ({ciudadanos.length})
+    - Si vacío: mensaje "Todavía no hay ciudadanos registrados."
+    - Si hay datos: tabla responsive con rows bordered (border-gray-200)
+    - Cada fila: nombre (text-gray-900), CI, WhatsApp
+
+TIPO DE DATO (Type Definition):
+  - type Ciudadano = {
+      id: string;        // crypto.randomUUID()
+      nombre: string;
+      ci: string;
+      whatsapp: string;
+    };
+
+FLUJO DE ESTADO (State Management):
+  - useState<Ciudadano[]>([])        -> ciudadanos (lista renderizada)
+  - useState("")                      -> nombre (input control)
+  - useState("")                      -> ci (input control)
+  - useState("")                      -> whatsapp (input control)
+  - useState("")                      -> mensaje (feedback al usuario)
+  - useState(false)                   -> listo (bandera de carga inicial)
+
+  Bandera `listo`:
+    - Inicial: false -> muestra "Cargando ciudadanos..."
+    - Al cargar useEffect: setListo(true) después de parsear localStorage
+    - Control de acceso: si sessionStorage.notiddrr_demo !== "activo" ->
+      router.replace("/") (redirige a login)
+
+USE EFFECT (Lado Cliente):
+  - Dependencias: [router]
+  - Condición primera: sessionStorage.getItem("notiddrr_demo") !== "activo"
+    -> router.replace("/") y return (bloquea acceso sin login)
+  - Intenta parsear localStorage.getItem("notiddrr_ciudadanos") || "[]"
+    -> setCiudadanos con los datos guardados o array vacío
+    -> setListo(true) para mostrar la UI
+  - Bloque catch: setCiudadanos([]) ante error de parseo
+
+const registrar (e: React.FormEvent<HTMLFormElement>):
+  - e.preventDefault()
+  - Limpia mensaje previo
+  - Validaciones secuenciales (nombre, ci, whatsapp)
+  - Validación CI: regex /^\d{7,8}$/ (7 u 8 dígitos)
+  - Validación WhatsApp: regex /^[67]\d{7}$/ (celular boliviano, empieza 6 u 7)
+  - Verificación duplicados: ciudadanos.some(c => c.ci === ci.trim())
+  - Creación objeto: id (UUID), nombre trim, ci trim, whatsapp trim
+  - Persistencia: localStorage.setItem("notiddrr_ciudadanos", JSON.stringify(actualizados))
+  - Actualización state: setCiudadanos(actualizados)
+  - Limpieza de formularios: reset nombre, ci, whatsapp
+  - Mensaje de éxito
+
+================================================================================
+3. MAPEO DE RUTAS, ENDPOINTS Y ESQUEMAS DE DATOS
+================================================================================
+
+RUTAS DE NAVEGACIÓN (Next.js App Router):
+
+  Ruta                | Componente              | Protección
+  --------------------|-------------------------|-------------------------
+  /                   | src/app/page.tsx        | Página de login
+  /dashboard          | src/app/dashboard/page.tsx | Área protegida (post-login)
+  /ciudadanos         | src/app/ciudadanos/page.tsx | Requiere sessionStorage.notiddrr_demo="activo"
+  /tramites           | src/app/tramites/page.tsx | Área protegida
+  /tramites/nuevo     | src/app/tramites/nuevo/page.tsx | Área protegida
+
+ENDPOINTS / API:
+
+  - NO HAY API ROUTES server-side
+  - No existen archivos en app/api/ o pages/api/
+  - Todo el estado y persistencia ocurre en el navegador del cliente
+  - Las "operaciones CRUD" se hacen via localStorage/sessionStorage directamente
+
+ESQUEMAS DE DATOS (Client-side):
+
+  Ciudadano (objeto localStorage):
+    {
+      id: string,           // UUID v4 generado con crypto.randomUUID()
+      nombre: string,       // Nombre completo del ciudadano
+      ci: string,           // Cédula de identidad (7 u 8 dígitos)
+      whatsapp: string      // Teléfono Boliviano (8 dígitos, empieza por 6 u 7)
+    }
+
+  Keys de Storage:
+    - sessionStorage: "notiddrr_demo" = "activo" | "" (string booleano)
+    - localStorage: "notiddrr_ciudadanos" = JSON.stringify[Ciudadano[]]
+
+Flujo de Navegación:
+  1. Usuario entra a http://localhost:3000
+  2. Si no hay sessionStorage.notiddrr_demo -> muestra formulario login
+  3. Usuario ingresa "admin" / "123456"
+  4. sessionStorage.setItem("notiddrr_demo", "activo")
+  5. router.push("/dashboard") 
+  6. Usuario navega o refresh a /ciudadanos
+  7. useEffect en page.tsx verifica sessionStorage.notiddrr_demo === "activo"
+  8. Si OK -> parsea localStorage.notiddrr_ciudadanos y muestra UI
+  9. Si NO -> router.replace("/") vuelve al login
+
+================================================================================
+4. DETECCIÓN DE ERRORES, CÓDIGO MUERTO, CUellos de botella y MEJORAS
+================================================================================
+
+PROBLEMAS IDENTIFICADOS:
+
+1. PÉRDIDA DE SESIÓN AL REINICIAR SERVIDOR
+   - CAUSA: sessionStorage es por pestaña/ventana del navegador
+   - Cada reinicio de `npm run dev` borra sessionStorage
+   - SOLUCIÓN: Persistir el demo flag en localStorage o crear API auth real
+
+2. SIN BACKEND/BASE DE DATOS REAL
+   - CAUSA: Almacenamiento completamente client-side (localStorage)
+   - LIMITACIONES: 
+     * Datos se pierden al cerrar navegador/limpiar cache
+     * No hay multi-usuario (todos comparten el mismo localStorage)
+     * No hay persistencia real a largo plazo
+   - SOLUCIÓN: Implementar API routes reales o conexión a base de datos
+
+3. VALIDACIONES CLIENT-SIDE SOLO
+   - CAUSA: Todas las validaciones en useEffect/registrar function client-side
+   - RIESGO: El usuario puede saltarse validaciones usando herramientas de devtools
+   - SOLUCIÓN: Agregar validaciones server-side en API routes
+
+4. useEffect dependencias incompletas
+   - Código: useEffect(..., [router]) 
+   - POTENCIAL PROBLEMA: No incluye sessionStorage como dependencia explícita,
+     pero el return temprano si (!sessionStorage...) hace que funcione
+   - RECOMENDACION: Agregar sessionStorage como dependencia o usar useRef
+
+5. Falta de manejo de errores en useEffect
+   - Try/catch alrededor de JSON.parse está bien
+   - Pero setListo(true) siempre se ejecuta aunque falle el parseo
+   - Esto podría mostrar UI vacía o inconsistente
+
+6. Código "muerto" o no utilizado:
+   - Import Link from "next/link" en ciudadanos/page.tsx (línea 5)
+     - Link SÍ se usa en el return (<Link href="/dashboard">...</Link> línea 94)
+   - Import useRouter de next/navigation (línea 6)
+     - SÍ se usa (useEffect router.replace y router.push en login)
+   - Variable `mostrarPassword` en page.tsx home (login) - SÍ está usada
+   - No hay componentes realmente "muertos" - todo tiene uso
+
+7. POSIBLES MEJORAS DE REFACTORIZACIÓN:
+
+   a) Extraer validaciones a funciones utilities/constantes
+      - Las regex /^\d{7,8}$/ y /^[67]\d{7}$/ están inline
+      - Podrían ser constantes al top level
+
+   b) Crear custom hook useCiudadanos()
+      - Lógica de fetch localStorage, agregar, actualizar podría
+        extraerse fuera del componente
+
+   c) Separar modo demo vs modo real
+      - sessionStorage.notiddrr_demo es un "hack" para el sprint
+      - Debería haber un endpoint /api/auth login real
+
+   d) Type safety improvements
+      - type Ciudadano definida inline en el archivo
+      - Podría ir a un archivo types/ separado
+
+   e) Accesibilidad mejorada
+      - Los labels tienen htmlFor, buenos
+      - Pero los mensajes de error podrían tener role="alert" consistente
+      - Los inputs faltan aria-describedby para mensajes de error
+
+   f) Performance: re-renders innecesarios
+      - setListo(true) dispara re-render completo
+      - Con más datos o complejidad, considerar memoization
+
+================================================================================
+5. TAREAS SUGERIDAS / PRÓXIMOS PASOS
+================================================================================
+
+PRIORIDAD ALTA (Para consolidar ruta /ciudadanos):
+
+  [ ] 1. SOLUCIONAR PÉRDIDA DE SESIÓN
+      - Mover sessionStorage.notiddrr_demo a localStorage con expiración
+      - O implementar API de autenticación real (/api/login)
+      - Esto evitará que reiniciar el servidor requiera re-login
+
+  [ ] 2. CONECTAR BACKEND REAL
+      - Crear app/api/auth/route.ts con login real
+      - Crear app/api/ciudadanos/route.ts con CRUD contra base de datos
+      - Migrar persistencia de localStorage a backend
+      - Proteger endpoints con autenticación JWT o sesión
+
+  [ ] 3. VALIDACIONES SERVER-SIDE
+      - Mover validaciones CI y WhatsApp a API routes
+      - Prevenir bypass de validaciones client-side
+      - Agregar validaciones de lado servidor para CI/Whatsapp únicos
+
+  [ ] 4. PERSISTENCIA MULTI-SESSION
+      - Actualmente datos solo en navegador actual
+      - Considerar implementar una API que sincronice los ciudadanos
+      - O migrar a base de datos (PostgreSQL, MongoDB, etc.)
+
+  [ ] 5. MEJORAS DE UI/UX
+      - Agregar loader states más detallados
+      - Mejorar mensajes de error con códigos/acciones sugeridas
+      - Agregar confirmación antes de eliminar ciudadano
+      - Mejorar accesibilidad (aria-live regions para mensajes)
+
+MEDIUM PRIORITY (Refactorización de código):
+
+  [ ] 6. Extraer custom hook useCiudadanos()
+      - Separar lógica de almacenamiento/localStorage del componente
+      - Probar más fácilmente y reutilizar
+
+  [ ] 7. Mover tipos a archivo separado
+      - types/ciudadanos.ts o incluir en schema compartido
+      - Mejorar maintainability
+
+  [ ] 8. Crear utilidades de validación
+      - Constants para regex patterns
+      - Funciones reutilizables validateCI(), validateWhatsApp()
+
+  [ ] 9. ESLint y TypeScript fixes
+      - Revisar advertencias del linter actuales
+      - Asegurar type safety en todas las props/state
+
+  [ ] 10. Testing
+      - Agregar tests unitarios para validaciones
+      - Tests de integración para flujo de registro
+      - Considerar setup de Jest o Testing Library con Next.js 16
+
+LOW PRIORITY (Arquitectura futura):
+
+  [ ] 11. Implementar enrutamiento protegido con middleware Next.js
+      - next.config.ts middleware para proteger /ciudadanos, /dashboard
+
+  [ ] 12. Agregar modo oscuro / responsive improvements
+      - Tailwind v4 already supports, verificar configuración
+
+  [ ] 13. Documentación API interna
+      - Si se crean API routes, documentar esquemas y endpoints
+
+================================================================================
+FIN DEL INFORME
+================================================================================
