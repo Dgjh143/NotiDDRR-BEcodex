@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { iniciarSesion } from "@/lib/api/auth";
 
 export default function Home() {
   const router = useRouter();
@@ -11,21 +12,51 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [error, setError] = useState("");
+  const [cargando, setCargando] = useState(false);
 
-  const ingresar = (e: React.FormEvent<HTMLFormElement>) => {
+  const ingresar = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
+
+    if (cargando) return;
 
     if (!usuario.trim() || !password.trim()) {
       setError("Debe completar el usuario y la contraseña.");
       return;
     }
 
-    if (usuario.trim() === "admin" && password === "123456") {
+    setCargando(true);
+
+    try {
+      // Validar credenciales en NestJS y PostgreSQL.
+      const respuesta = await iniciarSesion(
+        usuario.trim(),
+        password
+      );
+
+      // Compatibilidad temporal con el Dashboard del Sprint 1.
+      // Esta marca NO es una sesión segura.
       sessionStorage.setItem("notiddrr_demo", "activo");
+
+      // Guardar únicamente los datos públicos del usuario.
+      // No guardar la contraseña ni el token JWT.
+      sessionStorage.setItem(
+        "notiddrr_usuario",
+        JSON.stringify(respuesta.usuario)
+      );
+
+      setPassword("");
+
+      // Redirigir al panel.
       router.push("/dashboard");
-    } else {
-      setError("Usuario o contraseña incorrectos. Intente nuevamente.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ocurrió un error al iniciar sesión."
+      );
+    } finally {
+      setCargando(false);
     }
   };
 
@@ -52,10 +83,10 @@ export default function Home() {
 
         <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-3 text-center">
           <p className="text-xs font-medium text-blue-800">
-            Versión de demostración — Sprint 1
+            Versión en desarrollo — Sprint 2
           </p>
           <p className="mt-1 text-xs text-blue-700">
-            Acceso simulado para pruebas del Frontend.
+            Inicio de sesión conectado con NestJS y PostgreSQL.
           </p>
         </div>
 
@@ -79,7 +110,8 @@ export default function Home() {
               placeholder="Ingrese su usuario"
               autoComplete="username"
               required
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:border-blue-600"
+              disabled={cargando}
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:border-blue-600 disabled:opacity-60"
             />
           </div>
 
@@ -103,7 +135,8 @@ export default function Home() {
                 placeholder="Ingrese su contraseña"
                 autoComplete="current-password"
                 required
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-24 text-gray-900 outline-none focus:border-blue-600"
+                disabled={cargando}
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-24 text-gray-900 outline-none focus:border-blue-600 disabled:opacity-60"
               />
 
               <button
@@ -132,9 +165,12 @@ export default function Home() {
 
           <button
             type="submit"
-            className="w-full rounded-xl bg-blue-900 py-3 font-semibold text-white transition hover:bg-blue-700"
+            disabled={cargando}
+            className="w-full rounded-xl bg-blue-900 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Iniciar sesión
+            {cargando
+              ? "Verificando credenciales..."
+              : "Iniciar sesión"}
           </button>
         </form>
 
