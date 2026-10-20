@@ -39,3 +39,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Backend NestJS
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Archivos generados por Prisma
+backend/src/generated/
+
+# Herramientas auxiliares
+backend/.agents/
+backend/.claude/
+backend/.windsurf/
+
+# Respaldo temporal
+backend-estructura-inicial/
+backend/.git-backup/

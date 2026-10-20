@@ -1,16 +1,19 @@
+
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
-import type {
-  Ciudadano,
-  CiudadanoFormData,
-} from "@/features/ciudadanos/types/ciudadano";
+import { useCallback, useEffect, useState } from "react";
+
 import {
-  getServerSnapshot,
-  getSnapshot,
-  subscribe,
-  writeCiudadanos,
-} from "@/features/ciudadanos/lib/storage";
+  adaptarCiudadano,
+  type Ciudadano,
+  type CiudadanoFormData,
+} from "@/features/ciudadanos/types/ciudadano";
+
+import {
+  obtenerCiudadanos,
+  registrarCiudadano,
+} from "@/lib/api/ciudadanos";
+
 import { validateCI } from "@/features/ciudadanos/lib/validators";
 
 export type LoadStatus = "loading" | "ready";
@@ -19,59 +22,83 @@ export type AgregarResult =
   | { ok: true; ciudadano: Ciudadano }
   | { ok: false; error: string };
 
-const noopSubscribe = () => () => {};
-
-function useIsHydrated(): boolean {
-  return useSyncExternalStore(
-    noopSubscribe,
-    () => true,
-    () => false
-  );
-}
-
 export function useCiudadanos() {
-  const ciudadanos = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getServerSnapshot
-  );
-  const isHydrated = useIsHydrated();
-  const status: LoadStatus = isHydrated ? "ready" : "loading";
+  const [ciudadanos, setCiudadanos] = useState<Ciudadano[]>([]);
+  const [status, setStatus] = useState<LoadStatus>("loading");
 
+  // Cargar ciudadanos desde PostgreSQL mediante NestJS
+  const cargarCiudadanos = useCallback(async () => {
+    try {
+      const datos = await obtenerCiudadanos();
+
+      setCiudadanos(datos.map(adaptarCiudadano));
+    } catch (error) {
+      console.error("Error al cargar ciudadanos:", error);
+    } finally {
+      setStatus("ready");
+    }
+  }, []);
+
+  // Ejecutar la consulta al iniciar el módulo
+  useEffect(() => {
+    void cargarCiudadanos();
+  }, [cargarCiudadanos]);
+
+  // Registrar un ciudadano en PostgreSQL
   const agregarCiudadano = useCallback(
-    (datos: CiudadanoFormData): AgregarResult => {
-      const actuales = getSnapshot();
+    async (datos: CiudadanoFormData): Promise<AgregarResult> => {
       const ciNormalizado = datos.ci.trim();
-      const ciError = validateCI(ciNormalizado);
-      if (ciError) return { ok: false, error: ciError };
 
-      if (actuales.some((c) => c.ci.trim() === ciNormalizado)) {
+      const ciError = validateCI(ciNormalizado);
+
+      if (ciError) {
         return {
           ok: false,
-          error: "Ya existe un ciudadano registrado con ese CI.",
+          error: ciError,
         };
       }
 
-      const nuevo: Ciudadano = {
-        id: crypto.randomUUID(),
-        nombre: datos.nombre.trim(),
-        ci: ciNormalizado,
-        whatsapp: datos.whatsapp.trim(),
-        createdAt: new Date().toISOString(),
-      };
+      const nombreCompleto = datos.nombre.trim();
+      const partes = nombreCompleto.split(/\s+/);
+
+      if (partes.length < 2) {
+        return {
+          ok: false,
+          error: "Ingrese nombres y apellidos del ciudadano.",
+        };
+      }
+
+      const nombres = partes[0];
+      const apellidos = partes.slice(1).join(" ");
 
       try {
-        writeCiudadanos([...actuales, nuevo]);
-      } catch {
+        const nuevo = await registrarCiudadano({
+          nombres,
+          apellidos,
+          ci: ciNormalizado,
+          whatsapp: datos.whatsapp.trim(),
+          aceptaNotificaciones: false,
+        });
+
+        const ciudadano = adaptarCiudadano(nuevo);
+
+        setCiudadanos((actuales) => [ciudadano, ...actuales]);
+
+        return {
+          ok: true,
+          ciudadano,
+        };
+      } catch (error) {
         return {
           ok: false,
-          error: "No se pudo guardar en este navegador. Inténtalo nuevamente.",
+          error:
+            error instanceof Error
+              ? error.message
+              : "No se pudo registrar el ciudadano.",
         };
       }
-
-      return { ok: true, ciudadano: nuevo };
     },
-    []
+    [],
   );
 
   return {

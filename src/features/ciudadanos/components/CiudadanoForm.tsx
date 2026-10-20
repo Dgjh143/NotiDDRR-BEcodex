@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useRef } from "react";
@@ -12,26 +13,46 @@ import { useCiudadanoForm } from "@/features/ciudadanos/hooks/useCiudadanoForm";
 export function CiudadanoForm({
   agregarCiudadano,
 }: {
-  agregarCiudadano: (datos: CiudadanoFormData) => AgregarResult;
+  agregarCiudadano: (
+    datos: CiudadanoFormData
+  ) => Promise<AgregarResult>;
 }) {
   const nombreRef = useRef<HTMLInputElement>(null);
   const ciRef = useRef<HTMLInputElement>(null);
   const whatsappRef = useRef<HTMLInputElement>(null);
 
-  const handleInvalid = useCallback((field: keyof CiudadanoFormData) => {
-    const refs = {
-      nombre: nombreRef,
-      ci: ciRef,
-      whatsapp: whatsappRef,
-    };
-    refs[field].current?.focus();
-  }, []);
+  const handleInvalid = useCallback(
+    (field: keyof CiudadanoFormData) => {
+      const refs = {
+        nombre: nombreRef,
+        ci: ciRef,
+        whatsapp: whatsappRef,
+      };
 
-  const { form, errors, status, handleChange, handleBlur, handleSubmit } =
-    useCiudadanoForm(agregarCiudadano, handleInvalid);
+      refs[field].current?.focus();
+    },
+    []
+  );
+
+  const {
+    form,
+    errors,
+    status,
+    guardando,
+    handleChange,
+    handleBlur,
+    handleSubmit,
+  } = useCiudadanoForm(
+    agregarCiudadano,
+    handleInvalid
+  );
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+    <form
+      onSubmit={(e) => void handleSubmit(e)}
+      className="space-y-6"
+      noValidate
+    >
       <FormField
         ref={nombreRef}
         label="Nombre completo"
@@ -73,16 +94,28 @@ export function CiudadanoForm({
         autoComplete="off"
       />
 
-      <Button type="submit" className="w-full">
-        Guardar ciudadano
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={guardando}
+      >
+        {guardando
+          ? "Guardando en PostgreSQL..."
+          : "Guardar ciudadano"}
       </Button>
 
       {status.type === "error" && (
-        <StatusMessage tone="error" message={status.message} />
+        <StatusMessage
+          tone="error"
+          message={status.message}
+        />
       )}
 
       {status.type === "success" && (
-        <StatusMessage tone="success" message={status.message} />
+        <StatusMessage
+          tone="success"
+          message={status.message}
+        />
       )}
     </form>
   );

@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum EstadoTramite {
+  RECIBIDO
+  EN_PROCESO
+  OBSERVADO
+  MESA_SALIDA
+  ENTREGADO
+}
+
+enum EstadoNotificacion {
+  PENDIENTE
+  ENVIANDO
+  ENVIADO
+  ENTREGADO
+  FALLIDO
+}
+
+model Rol {
+  id       Int       @id @default(autoincrement())
+  nombre   String    @unique
+  usuarios Usuario[]
+
+  @@map("roles")
+}
+
+model Usuario {
+  id               Int               @id @default(autoincrement())
+  nombre           String
+  username         String            @unique
+  passwordHash     String
+  activo           Boolean           @default(true)
+  rolId            Int
+  rol              Rol               @relation(fields: [rolId], references: [id])
+  tramites         Tramite[]
+  historialEstados HistorialEstado[]
+  creadoEn         DateTime          @default(now())
+
+  @@map("usuarios")
+}
+
+model Ciudadano {
+  id                   Int       @id @default(autoincrement())
+  nombres              String
+  apellidos            String
+  ci                   String    @unique
+  whatsapp             String
+  aceptaNotificaciones Boolean   @default(false)
+  tramites             Tramite[]
+  creadoEn             DateTime  @default(now())
+
+  @@map("ciudadanos")
+}
+
+model Tramite {
+  id              Int               @id @default(autoincrement())
+  numeroDocumento String            @unique
+  matricula       String
+  oficina         String
+  estado          EstadoTramite     @default(RECIBIDO)
+  ciudadanoId     Int
+  ciudadano       Ciudadano         @relation(fields: [ciudadanoId], references: [id])
+  registradoPorId Int
+  registradoPor   Usuario           @relation(fields: [registradoPorId], references: [id])
+  servicios       TramiteServicio[]
+  historial       HistorialEstado[]
+  notificaciones  Notificacion[]
+  creadoEn        DateTime          @default(now())
+  actualizadoEn   DateTime          @updatedAt
+
+  @@index([matricula])
+  @@map("tramites")
+}
+
+model Servicio {
+  id       Int               @id @default(autoincrement())
+  nombre   String            @unique
+  activo   Boolean           @default(true)
+  tramites TramiteServicio[]
+
+  @@map("servicios")
+}
+
+model TramiteServicio {
+  tramiteId  Int
+  servicioId Int
+  tramite    Tramite  @relation(fields: [tramiteId], references: [id])
+  servicio   Servicio @relation(fields: [servicioId], references: [id])
+
+  @@id([tramiteId, servicioId])
+  @@map("tramite_servicios")
+}
+
+model HistorialEstado {
+  id             Int           @id @default(autoincrement())
+  tramiteId      Int
+  tramite        Tramite       @relation(fields: [tramiteId], references: [id])
+  funcionarioId  Int
+  funcionario    Usuario       @relation(fields: [funcionarioId], references: [id])
+  estadoAnterior EstadoTramite
+  estadoNuevo    EstadoTramite
+  observacion    String?
+  fecha          DateTime      @default(now())
+
+  @@map("historial_estados")
+}
+
+model Notificacion {
+  id        Int                @id @default(autoincrement())
+  tramiteId Int
+  tramite   Tramite            @relation(fields: [tramiteId], references: [id])
+  telefono  String
+  mensaje   String
+  estado    EstadoNotificacion @default(PENDIENTE)
+  creadoEn  DateTime           @default(now())
+  enviadoEn DateTime?
+
+  @@map("notificaciones")
+}
